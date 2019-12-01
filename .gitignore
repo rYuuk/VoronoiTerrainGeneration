@@ -1,0 +1,11 @@
+code
+*.csproj
+Library
+Temp
+Logs
+*.sln
+bm.code-workspace
+obj
+/.vs
+.vs/*
+
