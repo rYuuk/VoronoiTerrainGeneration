@@ -325,13 +325,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: cbe350d90aca1c9499ea551225d56284, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  dimensions: {x: 139.23, y: 105.9}
+  dimensions: {x: 118.19, y: 100}
   autoUpdate: 1
-  radius: 11.74
-  seed: 29
+  radius: 5
+  seed: 53
   relaxationCount: 3
-  usePoisonDiscSampler: 0
-  regionCount: 82
+  usePoisonDiscSampler: 1
+  regionCount: 137
   clipEdges: 1
   showDelaunayTriangles: 0
 --- !u!4 &1177126522

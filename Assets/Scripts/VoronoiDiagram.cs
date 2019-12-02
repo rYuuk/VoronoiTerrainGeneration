@@ -6,6 +6,7 @@ using TriangleNet.Voronoi;
 using TriangleNet.Tools;
 
 
+
 public class VoronoiDiagram : MonoBehaviour
 {
     public Vector2 dimensions = new Vector2(100, 100);
@@ -19,21 +20,22 @@ public class VoronoiDiagram : MonoBehaviour
     public bool showDelaunayTriangles;
 
     private Polygon centroids;
-    private Rectangle area;
+    private Rectangle rectangle;
     private TriangleNet.Mesh mesh;
     private List<TriangleNet.Topology.DCEL.Face> regions;
+    private IslandShape islandShape;
 
     public void Generate()
     {
         Random.InitState(seed);
-        area = new Rectangle(0, 0, dimensions.x, dimensions.y);
+        rectangle = new Rectangle(0, 0, dimensions.x, dimensions.y);
         centroids = new Polygon();
 
         if (usePoisonDiscSampler)
         {
             PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
             foreach (var sample in poissonDiscSampler.Samples())
-                centroids.Add(VertexFromVector(sample));
+                centroids.Add(sample.ToVertex());
         }
         else
         {
@@ -47,98 +49,12 @@ public class VoronoiDiagram : MonoBehaviour
         for (int i = 0; i < relaxationCount + 1; i++)
         {
             mesh = (TriangleNet.Mesh)centroids.Triangulate();
-            StandardVoronoi voronoi = new StandardVoronoi(mesh, area);
+            StandardVoronoi voronoi = new StandardVoronoi(mesh, rectangle);
             regions = voronoi.Faces;
 
             if (relaxationCount != 0)
-                centroids = LloydRelaxation(voronoi);
+                centroids = voronoi.LloydRelaxation(rectangle);
         }
-    }
-
-    /// <summary>
-    /// Returns polygon with points at centroid
-    /// Source: https://penetcedric.wordpress.com/2017/06/13/polygon-maps/
-    /// </summary>
-    /// <param name="voronoi">VoronoiBase such as StandardVoronoi or Bounded Voronoi</param>
-    private Polygon LloydRelaxation(VoronoiBase voronoi)
-    {
-        //create the new polygon
-        Polygon centroid = new Polygon(voronoi.Faces.Count);
-
-        //loop through the regions
-        for (int i = 0; i < voronoi.Faces.Count; ++i)
-        {
-            Vector2 average = new Vector2(0, 0);
-
-            //create the hash set of vertices -- this is neat as it will only contain 1 instance of each
-            HashSet<Vector2> verts = new HashSet<Vector2>();
-
-            var edge = voronoi.Faces[i].Edge;
-            var first = edge.Origin.ID;
-
-            EdgesOfFaceIterator(voronoi.Faces[i], true, (v1, v2) =>
-            {
-                verts.Add(v1);
-                verts.Add(v2);
-            });
-
-            if (verts.Count == 0)
-                continue;
-
-            //compute the centroid
-            var vertsEnum = verts.GetEnumerator();
-            while (vertsEnum.MoveNext())
-                average += vertsEnum.Current;
-            average /= verts.Count;
-            centroid.Add(VertexFromVector(average));
-        }
-        return centroid;
-    }
-
-    private Vector2 VectorFromPoint(Point point)
-    {
-        return new Vector2((float)point.X, (float)point.Y);
-    }
-
-    private Vertex VertexFromVector(Vector2 vector)
-    {
-        return new Vertex(vector.x, vector.y);
-    }
-
-
-    private void EdgesOfFaceIterator(TriangleNet.Topology.DCEL.Face face, bool clipEdges, System.Action<Vector2, Vector2> OnEdge)
-    {
-        var edge = face.Edge;
-        var first = edge.Origin.ID;
-        do
-        {
-            //extract the vertices position
-            Point p1 = new Point(edge.Origin.X, edge.Origin.Y);
-            Point p2 = new Point(edge.Twin.Origin.X, edge.Twin.Origin.Y);
-
-            if (clipEdges)
-            {
-                if ((area.Contains(p1) && !area.Contains(p2)))
-                {
-                    IntersectionHelper.BoxRayIntersection(area, p1, p2, ref p2); //case 1
-                }
-                else if (!area.Contains(p1) && area.Contains(p2))
-                {
-                    IntersectionHelper.BoxRayIntersection(area, p2, p1, ref p1); //case 2
-                }
-                else if (!area.Contains(p1) && !area.Contains(p2)) //case 3
-                {
-                    edge = edge.Next;
-                    continue;
-                }
-            }
-
-            Vector2 origin = VectorFromPoint(p1);
-            Vector2 end = VectorFromPoint(p2);
-
-            OnEdge?.Invoke(origin, end);
-            edge = edge.Next;
-        } while (edge != null && edge.Origin.ID != first);
     }
 
     private void OnDrawGizmos()
@@ -149,7 +65,10 @@ public class VoronoiDiagram : MonoBehaviour
         if (centroids != null)
         {
             for (int i = 0; i < centroids.Points.Count; i++)
-                Gizmos.DrawSphere(VectorFromPoint(centroids.Points[i]), 1f);
+            {
+                Gizmos.color = Color.red;
+                Gizmos.DrawSphere(centroids.Points[i].ToVector(), 1f);
+            }
 
             label += "\nRegions: " + centroids.Count;
         }
@@ -165,7 +84,7 @@ public class VoronoiDiagram : MonoBehaviour
                 var edge = face.Edge;
                 var first = edge.Origin.ID;
 
-                EdgesOfFaceIterator(face, clipEdges, (v1, v2) =>
+                face.LoopEdges(rectangle, clipEdges, (v1, v2) =>
                 {
                     Gizmos.color = Color.white;
                     Gizmos.DrawLine(v1, v2);
@@ -174,8 +93,7 @@ public class VoronoiDiagram : MonoBehaviour
                     Gizmos.DrawSphere(v1, 0.6f);
                     Gizmos.DrawSphere(v2, 0.6f);
                 });
-            }
-
+                }
 
         }
 
@@ -190,7 +108,7 @@ public class VoronoiDiagram : MonoBehaviour
             {
                 Vertex v0 = vertices[edge.P0];
                 Vertex v1 = vertices[edge.P1];
-                Gizmos.DrawLine(VectorFromPoint(v0), VectorFromPoint(v1));
+                Gizmos.DrawLine(v0.ToVector(), v1.ToVector());
             }
 
             label += "\nMesh vertices: " + mesh.Vertices.Count;
@@ -206,12 +124,11 @@ public class VoronoiDiagram : MonoBehaviour
         Gizmos.DrawLine(new Vector2(0, 0), new Vector2(dimensions.x, 0));
         Gizmos.DrawLine(new Vector2(dimensions.x, 0), dimensions);
         Gizmos.DrawLine(new Vector2(0, dimensions.y), dimensions);
-
     }
-
+   
     public void OnValidate()
     {
-       dimensions = new Vector2(Mathf.Max(15,dimensions.x), Mathf.Max(15,dimensions.y));
+        dimensions = new Vector2(Mathf.Max(15, dimensions.x), Mathf.Max(15, dimensions.y));
 
         if (radius < 5)
             radius = 5;

@@ -2,7 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 
-
+/// Source: http://gregschlom.com/devlog/2014/06/29/Poisson-disc-sampling-Unity.html
+/// 
 /// Poisson-disc sampling using Bridson's algorithm.
 /// Adapted from Mike Bostock's Javascript source: http://bl.ocks.org/mbostock/19168c663618b7f07158
 ///
