@@ -13,12 +13,8 @@ public class VoronoiDiagram : MonoBehaviour
     public float radius = 10;
     public int seed = 1;
     public int relaxationCount = 2;
-
-    [Header("Sampling")]
     public bool usePoisonDiscSampler = true;
-
     public int regionCount = 40;
-    
     public bool clipEdges = false;
     public bool showDelaunayTriangles;
 
@@ -31,45 +27,32 @@ public class VoronoiDiagram : MonoBehaviour
     {
         Random.InitState(seed);
         area = new Rectangle(0, 0, dimensions.x, dimensions.y);
-        Polygon polygons = new Polygon();
+        centroids = new Polygon();
 
         if (usePoisonDiscSampler)
         {
             PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
             foreach (var sample in poissonDiscSampler.Samples())
-                polygons.Add(VertexFromVector(sample));
+                centroids.Add(VertexFromVector(sample));
         }
         else
         {
             for (int i = 0; i < regionCount; i++)
-                polygons.Add(new Vertex(Random.Range(0, dimensions.x), Random.Range(0, dimensions.y)
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                    
-                           
-                    ));
+                centroids.Add(new Vertex(Random.Range(0, dimensions.x), Random.Range(0, dimensions.y)));
         }
 
-        if (polygons.Count < 3)
+        if (centroids.Count < 3)
             return;
 
         for (int i = 0; i < relaxationCount + 1; i++)
         {
-            mesh = (TriangleNet.Mesh)polygons.Triangulate();
+            mesh = (TriangleNet.Mesh)centroids.Triangulate();
             StandardVoronoi voronoi = new StandardVoronoi(mesh, area);
             regions = voronoi.Faces;
 
             if (relaxationCount != 0)
-                polygons = LloydRelaxation(voronoi);
-
+                centroids = LloydRelaxation(voronoi);
         }
-        
-        centroids = polygons;
     }
 
     /// <summary>
@@ -99,16 +82,16 @@ public class VoronoiDiagram : MonoBehaviour
                 verts.Add(v2);
             });
 
+            if (verts.Count == 0)
+                continue;
+
             //compute the centroid
             var vertsEnum = verts.GetEnumerator();
             while (vertsEnum.MoveNext())
                 average += vertsEnum.Current;
             average /= verts.Count;
-
-            //insert back into the result polygon
             centroid.Add(VertexFromVector(average));
         }
-
         return centroid;
     }
 
@@ -228,7 +211,7 @@ public class VoronoiDiagram : MonoBehaviour
 
     public void OnValidate()
     {
-       dimensions = new Vector2(Mathf.Max(0,dimensions.x), Mathf.Max(0,dimensions.y));
+       dimensions = new Vector2(Mathf.Max(15,dimensions.x), Mathf.Max(15,dimensions.y));
 
         if (radius < 5)
             radius = 5;
