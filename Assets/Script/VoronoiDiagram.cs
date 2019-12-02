@@ -9,48 +9,42 @@ using TriangleNet.Tools;
 public class VoronoiDiagram : MonoBehaviour
 {
     public Vector2 dimensions = new Vector2(100, 100);
-    public int regionCount = 10;
     public bool autoUpdate = false;
+    public float radius = 10;
     public int seed = 1;
     public int relaxationCount = 2;
     public bool clipEdges = false;
+    public bool showDelaunayTriangles;
 
     private Polygon centroids;
     private Rectangle area;
+    private TriangleNet.Mesh mesh;
     private List<TriangleNet.Topology.DCEL.Face> regions;
-    private StandardVoronoi voronoi;
 
     public void Generate()
     {
         Random.InitState(seed);
-        centroids = new Polygon();
-
-        for (int i = 0; i < regionCount; i++)
-        {
-            Vertex vertex = new Vertex(Random.Range(0, dimensions.x), Random.Range(0, dimensions.y));
-            centroids.Add(vertex);
-        }
-
         area = new Rectangle(0, 0, dimensions.x, dimensions.y);
+        Polygon polygons = new Polygon();
+        PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
+        foreach (var sample in poissonDiscSampler.Samples())
+            polygons.Add(VertexFromVector(sample));
 
-        TriangleNet.Meshing.ConstraintOptions constraintOptions = new TriangleNet.Meshing.ConstraintOptions
+        if (polygons.Count < 3)
+            return;
+
+        for (int i = 0; i < relaxationCount + 1; i++)
         {
-            //ConformingDelaunay = true,
-            Convex = true
-        };
-
-        TriangleNet.Mesh mesh = (TriangleNet.Mesh)centroids.Triangulate(constraintOptions);
-        voronoi = new StandardVoronoi(mesh, area);
-        regions = voronoi.Faces;
-
-        for (int i = 0; i < relaxationCount; i++)
-        {
-            centroids = LloydRelaxation(voronoi);
-            Debug.Log("i: " + i + centroids.Count);
-            mesh = (TriangleNet.Mesh)centroids.Triangulate(constraintOptions);
-            voronoi = new StandardVoronoi(mesh, area);
+            mesh = (TriangleNet.Mesh)polygons.Triangulate();
+            StandardVoronoi voronoi = new StandardVoronoi(mesh, area);
             regions = voronoi.Faces;
+
+            if (relaxationCount != 0)
+                polygons = LloydRelaxation(voronoi);
+
         }
+        
+        centroids = polygons;
     }
 
     /// <summary>
@@ -61,20 +55,21 @@ public class VoronoiDiagram : MonoBehaviour
     private Polygon LloydRelaxation(VoronoiBase voronoi)
     {
         //create the new polygon
-        Polygon res = new Polygon(voronoi.Faces.Count);
+        Polygon centroid = new Polygon(voronoi.Faces.Count);
 
         //loop through the regions
-        for (int i = 0; i < regions.Count; ++i)
+        for (int i = 0; i < voronoi.Faces.Count; ++i)
         {
-            Vector2 sumVector = new Vector2(0, 0);
+            Vector2 average = new Vector2(0, 0);
 
             //create the hash set of vertices -- this is neat as it will only contain 1 instance of each
             HashSet<Vector2> verts = new HashSet<Vector2>();
 
-            var edge = regions[i].Edge;
+            var edge = voronoi.Faces[i].Edge;
             var first = edge.Origin.ID;
 
-            IterateEdgesOfFace(regions[i], true, (v1, v2) => {
+            EdgesOfFaceIterator(voronoi.Faces[i], true, (v1, v2) =>
+            {
                 verts.Add(v1);
                 verts.Add(v2);
             });
@@ -82,16 +77,14 @@ public class VoronoiDiagram : MonoBehaviour
             //compute the centroid
             var vertsEnum = verts.GetEnumerator();
             while (vertsEnum.MoveNext())
-            {
-                sumVector += vertsEnum.Current;
-            }
-            sumVector /= verts.Count;
+                average += vertsEnum.Current;
+            average /= verts.Count;
 
             //insert back into the result polygon
-            res.Add(new Vertex(sumVector.x, sumVector.y));
+            centroid.Add(VertexFromVector(average));
         }
 
-        return res;
+        return centroid;
     }
 
     private Vector2 VectorFromPoint(Point point)
@@ -99,7 +92,13 @@ public class VoronoiDiagram : MonoBehaviour
         return new Vector2((float)point.X, (float)point.Y);
     }
 
-    private void IterateEdgesOfFace(TriangleNet.Topology.DCEL.Face face, bool clipEdges, System.Action<Vector2, Vector2> OnEdge)
+    private Vertex VertexFromVector(Vector2 vector)
+    {
+        return new Vertex(vector.x, vector.y);
+    }
+
+
+    private void EdgesOfFaceIterator(TriangleNet.Topology.DCEL.Face face, bool clipEdges, System.Action<Vector2, Vector2> OnEdge)
     {
         var edge = face.Edge;
         var first = edge.Origin.ID;
@@ -113,7 +112,7 @@ public class VoronoiDiagram : MonoBehaviour
             {
                 if ((area.Contains(p1) && !area.Contains(p2)))
                 {
-                    IntersectionHelper.BoxRayIntersection(area, p1, p2, ref p2); //case 2
+                    IntersectionHelper.BoxRayIntersection(area, p1, p2, ref p2); //case 1
                 }
                 else if (!area.Contains(p1) && area.Contains(p2))
                 {
@@ -136,38 +135,81 @@ public class VoronoiDiagram : MonoBehaviour
 
     private void OnDrawGizmos()
     {
+        string label = "Info: ";
+
         Gizmos.color = Color.red;
         if (centroids != null)
         {
             for (int i = 0; i < centroids.Points.Count; i++)
-                Gizmos.DrawSphere(new Vector2((float)centroids.Points[i].X, (float)centroids.Points[i].Y), 1f);
+                Gizmos.DrawSphere(VectorFromPoint(centroids.Points[i]), 1f);
+
+            label += "\nRegions: " + centroids.Count;
         }
 
         if (regions != null)
         {
             Gizmos.color = Color.white;
 
+            label += "\nFaces: " + regions.Count;
+
             foreach (var face in regions)
             {
                 var edge = face.Edge;
                 var first = edge.Origin.ID;
 
-                IterateEdgesOfFace(face, clipEdges, (v1,v2) => Gizmos.DrawLine(v1, v2));
+                EdgesOfFaceIterator(face, clipEdges, (v1, v2) =>
+                {
+                    Gizmos.color = Color.white;
+                    Gizmos.DrawLine(v1, v2);
+
+                    Gizmos.color = Color.blue;
+                    Gizmos.DrawSphere(v1, 0.6f);
+                    Gizmos.DrawSphere(v2, 0.6f);
+                });
             }
 
-            Gizmos.color = Color.yellow;
-            Gizmos.DrawLine(new Vector2(0, 0), new Vector2(0, dimensions.y));
-            Gizmos.DrawLine(new Vector2(0, 0), new Vector2(dimensions.x, 0));
-            Gizmos.DrawLine(new Vector2(dimensions.x, 0), dimensions);
-            Gizmos.DrawLine(new Vector2(0, dimensions.y), dimensions);
 
         }
+
+        if (mesh != null && showDelaunayTriangles)
+        {
+            List<Vertex> vertices = new List<Vertex>();
+            foreach (Vertex vertex in mesh.Vertices)
+                vertices.Add(vertex);
+            Gizmos.color = Color.black;
+
+            foreach (Edge edge in mesh.Edges)
+            {
+                Vertex v0 = vertices[edge.P0];
+                Vertex v1 = vertices[edge.P1];
+                Gizmos.DrawLine(VectorFromPoint(v0), VectorFromPoint(v1));
+            }
+
+            label += "\nMesh vertices: " + mesh.Vertices.Count;
+            label += "\nMesh triangles: " + mesh.Triangles.Count;
+            label += "\nMesh edges: " + mesh.NumberOfEdges;
+
+        }
+
+        UnityEditor.Handles.Label(transform.position, label);
+
+        Gizmos.color = Color.yellow;
+        Gizmos.DrawLine(new Vector2(0, 0), new Vector2(0, dimensions.y));
+        Gizmos.DrawLine(new Vector2(0, 0), new Vector2(dimensions.x, 0));
+        Gizmos.DrawLine(new Vector2(dimensions.x, 0), dimensions);
+        Gizmos.DrawLine(new Vector2(0, dimensions.y), dimensions);
+
     }
 
     public void OnValidate()
     {
-        if (regionCount <= 2)
-            regionCount = 3;
+       dimensions = new Vector2(Mathf.Max(0,dimensions.x), Mathf.Max(0,dimensions.y));
+
+        if (radius < 5)
+            radius = 5;
+
+        if (seed < 0)
+            seed = 0;
 
         if (relaxationCount < 0)
             relaxationCount = 0;
