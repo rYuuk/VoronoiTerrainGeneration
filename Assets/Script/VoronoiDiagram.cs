@@ -13,6 +13,12 @@ public class VoronoiDiagram : MonoBehaviour
     public float radius = 10;
     public int seed = 1;
     public int relaxationCount = 2;
+
+    [Header("Sampling")]
+    public bool usePoisonDiscSampler = true;
+
+    public int regionCount = 40;
+    
     public bool clipEdges = false;
     public bool showDelaunayTriangles;
 
@@ -26,9 +32,28 @@ public class VoronoiDiagram : MonoBehaviour
         Random.InitState(seed);
         area = new Rectangle(0, 0, dimensions.x, dimensions.y);
         Polygon polygons = new Polygon();
-        PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
-        foreach (var sample in poissonDiscSampler.Samples())
-            polygons.Add(VertexFromVector(sample));
+
+        if (usePoisonDiscSampler)
+        {
+            PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
+            foreach (var sample in poissonDiscSampler.Samples())
+                polygons.Add(VertexFromVector(sample));
+        }
+        else
+        {
+            for (int i = 0; i < regionCount; i++)
+                polygons.Add(new Vertex(Random.Range(0, dimensions.x), Random.Range(0, dimensions.y)
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                    
+                           
+                    ));
+        }
 
         if (polygons.Count < 3)
             return;

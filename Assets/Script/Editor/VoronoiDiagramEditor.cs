@@ -10,8 +10,7 @@ public class VoronoiDiagramEditor : Editor
     public override void OnInspectorGUI()
     {
         VoronoiDiagram voronoiDiagram = (VoronoiDiagram)target;
-
-
+        
         if (DrawDefaultInspector())
         {
             if (voronoiDiagram.autoUpdate)
