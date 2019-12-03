@@ -5,7 +5,6 @@ using TriangleNet.Topology.DCEL;
 using System.Collections.Generic;
 using TriangleNet.Voronoi;
 using Vertex = TriangleNet.Geometry.Vertex;
-using TriangleNet;
 
 public class Cell
 {
@@ -27,29 +26,86 @@ public class CellData
 
 }
 
-public static class CellGenerator
+public enum CellType
 {
-    private static Polygon GeneratePolygon(int seed, Vector2 dimensions, bool usePoisonDiscSampler, int regionCount, float radius)
+    Random,
+    Square,
+    Hexagon,
+    PoisonDisc
+}
+
+public class CellGenerator
+{
+    private Vector2 dimensions;
+    private int seed;
+    private int regionCount;
+    private float radius;
+    private int relaxationCount;
+    private Rectangle rectangle;
+
+    public CellGenerator(Vector2 dimensions, int seed, int relaxationCount = 0, int regionCount = 0, float radius = 0)
+    {
+        this.dimensions = dimensions;
+        this.seed = seed;
+        this.regionCount = regionCount;
+        this.radius = radius;
+        this.relaxationCount = relaxationCount;
+
+        rectangle = new Rectangle(0, 0, dimensions.x, dimensions.y);
+    }
+
+    private Polygon GenerateRandom()
+    {
+        Polygon polygon = new Polygon();
+        UnityEngine.Random.InitState(seed);
+        for (int i = 0; i < regionCount; i++)
+            polygon.Add(new Vertex(UnityEngine.Random.Range(0, dimensions.x), UnityEngine.Random.Range(0, dimensions.y)));
+        return polygon;
+
+    }
+
+    private Polygon GeneratePoisonDisc()
+    {
+        Polygon polygon = new Polygon();
+        UnityEngine.Random.InitState(seed);
+        PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
+        foreach (var sample in poissonDiscSampler.Samples())
+            polygon.Add(sample.ToVertex());
+        return polygon;
+    }
+
+    private Polygon GenerateHexagon()
     {
         Polygon centroids = new Polygon();
-        Random.InitState(seed);
-
-        if (usePoisonDiscSampler)
+        for (int x = 0; x < regionCount; x++)
         {
-            PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
-            foreach (var sample in poissonDiscSampler.Samples())
-                centroids.Add(sample.ToVertex());
-        }
-        else
-        {
-            for (int i = 0; i < regionCount; i++)
-                centroids.Add(new Vertex(Random.Range(0, dimensions.x), Random.Range(0, dimensions.y)));
+            for (int y = 0; y < regionCount; y++)
+            {
+                Vertex vertex = new Vertex(((0.5f + x) / regionCount) * dimensions.x, ((0.25f + (0.5f * (x % 2)) + y) / regionCount) * dimensions.y);
+                centroids.Add(vertex);
+            }
         }
 
         return centroids;
     }
 
-    private static CellData GenerateCellData(Rectangle rectangle, Polygon polygon, int relaxationCount)
+    private Polygon GenerateSquare()
+    {
+        Polygon centroids = new Polygon();
+
+        for (int x = 0; x < regionCount; x++)
+        {
+            for (int y = 0; y < regionCount; y++)
+            {
+                Vertex vertex = new Vertex(((0.5f + x) / regionCount) * dimensions.x, ((0.5f + y) / regionCount) * dimensions.y);
+                centroids.Add(vertex);
+            }
+        }
+
+        return centroids;
+    }
+
+    private CellData GenerateCellData(Polygon polygon, int relaxationCount = 0)
     {
         CellData cellData = new CellData();
 
@@ -75,30 +131,77 @@ public static class CellGenerator
 
         foreach (Face face in faces)
         {
-            cellData.cells.Add(new Cell(face, new List<int>()));
+            List<int> neighbours = new List<int>();
+
+            HalfEdge edge = face.Edge;
+            int first = edge.Origin.ID;
+
+            do
+            {
+                int id = edge.Twin.Face.ID;
+                if (id != face.ID && !neighbours.Contains(id))
+                    neighbours.Add(id);
+
+                edge = edge.Next;
+            } while (edge != null && edge.Origin.ID != first);
+
+            cellData.cells.Add(new Cell(face, neighbours));
         }
         return cellData;
     }
 
-
     /// <summary>
-    /// Generate cell data using poison disc sampling
+    /// Generate cells with random points
     /// </summary>
-    public static CellData Generate(int seed, Vector2 dimensions, int regionCount, int relaxationCount)
+    private CellData Random()
     {
-        Rectangle rectangle = new Rectangle(0, 0, dimensions.x, dimensions.y);
-        Polygon polygon = GeneratePolygon(seed, dimensions, false,  regionCount, 0);
-        return GenerateCellData(rectangle, polygon, relaxationCount);
+        Polygon polygon = GenerateRandom();
+        return GenerateCellData(polygon, relaxationCount);
     }
 
     /// <summary>
     /// Generate cell data using poison disc sampling
     /// </summary>
-    public static CellData Generate(int seed, Vector2 dimensions, float radius, int relaxationCount)
+    private CellData PoisonDisc()
     {
-        Rectangle rectangle = new Rectangle(0, 0, dimensions.x, dimensions.y);
-        Polygon polygon = GeneratePolygon(seed, dimensions, true,  0, radius);
-        return GenerateCellData(rectangle, polygon, relaxationCount);
+        Polygon polygon = GeneratePoisonDisc();
+        return GenerateCellData(polygon, relaxationCount);
+    }
 
+    /// <summary>
+    /// Generate hexagon cells
+    /// </summary>
+    private CellData Hexagon()
+    {
+        Polygon polygon = GenerateHexagon();
+        return GenerateCellData(polygon);
+
+    }
+
+    /// <summary>
+    /// Generate square cells
+    /// </summary>
+    private CellData Square()
+    {
+        Polygon polygon = GenerateSquare();
+        return GenerateCellData(polygon);
+
+    }
+
+    public CellData Generate(CellType cellType)
+    {
+        switch (cellType)
+        {
+            case CellType.Random:
+                return Random();
+            case CellType.Square:
+                return Square();
+            case CellType.Hexagon:
+                return Hexagon();
+            case CellType.PoisonDisc:
+                return PoisonDisc();
+            default:
+                return null;
+        }
     }
 }

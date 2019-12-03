@@ -327,11 +327,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   dimensions: {x: 100, y: 100}
   autoUpdate: 1
-  radius: 5
-  seed: 49
-  relaxationCount: 3
-  usePoisonDiscSampler: 1
-  regionCount: 135
+  radius: 3
+  seed: 38
+  relaxationCount: 4
+  cellTye: 3
+  regionCount: 931
+  tileCount: {x: 40, y: 40}
   clipEdges: 1
   showDelaunayTriangles: 0
   islandFunction: 0

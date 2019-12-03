@@ -14,15 +14,17 @@ public class VoronoiDiagram : MonoBehaviour
     public float radius = 10;
     public int seed = 1;
     public int relaxationCount = 2;
-    public bool usePoisonDiscSampler = true;
+    public CellType cellType = CellType.Random;
     public int regionCount = 40;
     public bool clipEdges = false;
     public bool showDelaunayTriangles;
     public IslandShape.FunctionType islandFunction;
-    private Rectangle rectangle;
-    private IslandShape islandShape;
 
+    private Rectangle rectangle;
+    private CellGenerator cellGenerator;
     private CellData cellData;
+    private Map map;
+    private IslandShape islandShape;
 
     public void Generate()
     {
@@ -30,10 +32,27 @@ public class VoronoiDiagram : MonoBehaviour
         Random.InitState(seed);
         rectangle = new Rectangle(0, 0, dimensions.x, dimensions.y);
 
-        if (usePoisonDiscSampler)
-            cellData = CellGenerator.Generate(seed, dimensions, radius, relaxationCount);
-        else
-            cellData = CellGenerator.Generate(seed, dimensions, regionCount, relaxationCount);
+        cellGenerator = new CellGenerator(dimensions, seed, relaxationCount, regionCount, radius);
+        cellData = cellGenerator.Generate(cellType);
+
+        map = new Map(cellData.polygon, cellData.cells);
+
+        map.cells.ForEach(cell =>
+        {
+            if (islandShape.IsInside(islandFunction, cellData.polygon.Points[cell.face.ID]))
+                cell.isWater = false;
+            else
+                cell.isWater = true;
+        });
+
+        map.cells.ForEach(cell =>
+        {
+            foreach (var neighbour in cell.neighbours)
+            {
+                if (!cell.isWater && map.cells[neighbour].isWater)
+                    cell.isBorder = true;
+            }
+        });
     }
 
     private void OnDrawGizmos()
@@ -42,20 +61,23 @@ public class VoronoiDiagram : MonoBehaviour
 
         Gizmos.color = Color.red;
 
-        if (cellData == null)
+        if (map == null)
             return;
 
-        if (cellData.cells != null && cellData.cells.Count != 0)
+        label += "\nFaces: " + map.cells.Count;
+
+        if (map.cells.Count != 0)
         {
             Gizmos.color = Color.white;
 
-            label += "\nFaces: " + cellData.cells.Count;
-
-            foreach (var cell in cellData.cells)
+            foreach (var cell in map.cells)
             {
-                if (islandShape.IsInside(islandFunction, cellData.polygon.Points[cell.face.ID]))
+                if (!cell.isWater)
                 {
-                    Gizmos.color = Color.green;
+                    if (cell.isBorder)
+                        Gizmos.color = Color.red;
+                    else
+                        Gizmos.color = Color.green;
                 }
                 else
                     Gizmos.color = Color.blue;
@@ -76,7 +98,6 @@ public class VoronoiDiagram : MonoBehaviour
                 });
 
             }
-
         }
 
         if (cellData.mesh != null && showDelaunayTriangles)
@@ -112,8 +133,8 @@ public class VoronoiDiagram : MonoBehaviour
     {
         dimensions = new Vector2(Mathf.Max(15, dimensions.x), Mathf.Max(15, dimensions.y));
         seed = Mathf.Max(0, seed);
-        regionCount = Mathf.Max(0, regionCount);
-        radius = Mathf.Max(5, radius);
+        regionCount = Mathf.Max(1, regionCount);
+        radius = Mathf.Max(2, radius);
         relaxationCount = Mathf.Max(0, relaxationCount);
     }
 }
