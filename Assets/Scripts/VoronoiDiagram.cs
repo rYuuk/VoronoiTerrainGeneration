@@ -18,43 +18,22 @@ public class VoronoiDiagram : MonoBehaviour
     public int regionCount = 40;
     public bool clipEdges = false;
     public bool showDelaunayTriangles;
-
-    private Polygon centroids;
+    public IslandShape.FunctionType islandFunction;
     private Rectangle rectangle;
-    private TriangleNet.Mesh mesh;
-    private List<TriangleNet.Topology.DCEL.Face> regions;
     private IslandShape islandShape;
+
+    private CellData cellData;
 
     public void Generate()
     {
+        islandShape = new IslandShape(seed, dimensions.x, dimensions.y);
         Random.InitState(seed);
         rectangle = new Rectangle(0, 0, dimensions.x, dimensions.y);
-        centroids = new Polygon();
 
         if (usePoisonDiscSampler)
-        {
-            PoissonDiscSampler poissonDiscSampler = new PoissonDiscSampler(dimensions.x, dimensions.y, radius);
-            foreach (var sample in poissonDiscSampler.Samples())
-                centroids.Add(sample.ToVertex());
-        }
+            cellData = CellGenerator.Generate(seed, dimensions, radius, relaxationCount);
         else
-        {
-            for (int i = 0; i < regionCount; i++)
-                centroids.Add(new Vertex(Random.Range(0, dimensions.x), Random.Range(0, dimensions.y)));
-        }
-
-        if (centroids.Count < 3)
-            return;
-
-        for (int i = 0; i < relaxationCount + 1; i++)
-        {
-            mesh = (TriangleNet.Mesh)centroids.Triangulate();
-            StandardVoronoi voronoi = new StandardVoronoi(mesh, rectangle);
-            regions = voronoi.Faces;
-
-            if (relaxationCount != 0)
-                centroids = voronoi.LloydRelaxation(rectangle);
-        }
+            cellData = CellGenerator.Generate(seed, dimensions, regionCount, relaxationCount);
     }
 
     private void OnDrawGizmos()
@@ -62,58 +41,61 @@ public class VoronoiDiagram : MonoBehaviour
         string label = "Info: ";
 
         Gizmos.color = Color.red;
-        if (centroids != null)
-        {
-            for (int i = 0; i < centroids.Points.Count; i++)
-            {
-                Gizmos.color = Color.red;
-                Gizmos.DrawSphere(centroids.Points[i].ToVector(), 1f);
-            }
 
-            label += "\nRegions: " + centroids.Count;
-        }
+        if (cellData == null)
+            return;
 
-        if (regions != null)
+        if (cellData.cells != null && cellData.cells.Count != 0)
         {
             Gizmos.color = Color.white;
 
-            label += "\nFaces: " + regions.Count;
+            label += "\nFaces: " + cellData.cells.Count;
 
-            foreach (var face in regions)
+            foreach (var cell in cellData.cells)
             {
-                var edge = face.Edge;
+                if (islandShape.IsInside(islandFunction, cellData.polygon.Points[cell.face.ID]))
+                {
+                    Gizmos.color = Color.green;
+                }
+                else
+                    Gizmos.color = Color.blue;
+
+                Gizmos.DrawSphere(cellData.polygon.Points[cell.face.ID].ToVector(), 1f);
+
+                var edge = cell.face.Edge;
                 var first = edge.Origin.ID;
 
-                face.LoopEdges(rectangle, clipEdges, (v1, v2) =>
+                cell.face.LoopEdges(rectangle, clipEdges, (v1, v2) =>
                 {
-                    Gizmos.color = Color.white;
+                    Gizmos.color = Color.black;
                     Gizmos.DrawLine(v1, v2);
 
-                    Gizmos.color = Color.blue;
-                    Gizmos.DrawSphere(v1, 0.6f);
-                    Gizmos.DrawSphere(v2, 0.6f);
+                    //Gizmos.color = Color.black;
+                    //Gizmos.DrawSphere(v1, 0.6f);
+                    //Gizmos.DrawSphere(v2, 0.6f);
                 });
-                }
+
+            }
 
         }
 
-        if (mesh != null && showDelaunayTriangles)
+        if (cellData.mesh != null && showDelaunayTriangles)
         {
             List<Vertex> vertices = new List<Vertex>();
-            foreach (Vertex vertex in mesh.Vertices)
+            foreach (Vertex vertex in cellData.mesh.Vertices)
                 vertices.Add(vertex);
             Gizmos.color = Color.black;
 
-            foreach (Edge edge in mesh.Edges)
+            foreach (Edge edge in cellData.mesh.Edges)
             {
                 Vertex v0 = vertices[edge.P0];
                 Vertex v1 = vertices[edge.P1];
                 Gizmos.DrawLine(v0.ToVector(), v1.ToVector());
             }
 
-            label += "\nMesh vertices: " + mesh.Vertices.Count;
-            label += "\nMesh triangles: " + mesh.Triangles.Count;
-            label += "\nMesh edges: " + mesh.NumberOfEdges;
+            label += "\nMesh vertices: " + cellData.mesh.Vertices.Count;
+            label += "\nMesh triangles: " + cellData.mesh.Triangles.Count;
+            label += "\nMesh edges: " + cellData.mesh.NumberOfEdges;
 
         }
 
@@ -125,18 +107,13 @@ public class VoronoiDiagram : MonoBehaviour
         Gizmos.DrawLine(new Vector2(dimensions.x, 0), dimensions);
         Gizmos.DrawLine(new Vector2(0, dimensions.y), dimensions);
     }
-   
+
     public void OnValidate()
     {
         dimensions = new Vector2(Mathf.Max(15, dimensions.x), Mathf.Max(15, dimensions.y));
-
-        if (radius < 5)
-            radius = 5;
-
-        if (seed < 0)
-            seed = 0;
-
-        if (relaxationCount < 0)
-            relaxationCount = 0;
+        seed = Mathf.Max(0, seed);
+        regionCount = Mathf.Max(0, regionCount);
+        radius = Mathf.Max(5, radius);
+        relaxationCount = Mathf.Max(0, relaxationCount);
     }
 }
