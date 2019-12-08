@@ -4,6 +4,8 @@ using TriangleNet.Geometry;
 using TriangleNet.Tools;
 using TriangleNet.Voronoi;
 using System.Collections.Generic;
+using TriangleNet.Topology.DCEL;
+using Vertex = TriangleNet.Geometry.Vertex;
 
 public static class Extensions
 {
@@ -15,13 +17,6 @@ public static class Extensions
     public static Vertex ToVertex(this Vector2 vector)
     {
         return new Vertex(vector.x, vector.y);
-    }
-
-    public static float Length(this Point point)
-    {
-        Vector2 vector = new Vector2((float)point.X, (float)point.Y);
-        float distance = Vector2.Distance(Vector2.zero, vector);
-        return distance;
     }
 
     /// <summary>
@@ -47,8 +42,10 @@ public static class Extensions
 
             voronoi.Faces[i].LoopEdges(rectangle, true, (v1, v2) =>
             {
-                verts.Add(v1);
-                verts.Add(v2);
+                if (!verts.Contains(v1))
+                    verts.Add(v1);
+                if (!verts.Contains(v2))
+                    verts.Add(v2);
             });
 
             if (verts.Count == 0)
@@ -64,7 +61,8 @@ public static class Extensions
         return centroid;
     }
 
-    public static void LoopEdges(this TriangleNet.Topology.DCEL.Face face, Rectangle rectangle, bool clipEdges, System.Action<Vector2, Vector2> OnEdge)
+
+    public static void LoopEdges(this Face face, Rectangle rectangle, bool clipEdges, System.Action<Vector2, Vector2> OnEdge)
     {
         var edge = face.Edge;
         var first = edge.Origin.ID;
@@ -98,4 +96,17 @@ public static class Extensions
             edge = edge.Next;
         } while (edge != null && edge.Origin.ID != first);
     }
+
+    public static void LoopEdges(this Face face, System.Action<HalfEdge> OnEdge)
+    {
+        var edge = face.Edge;
+        var first = edge.Origin.ID;
+        do
+        {
+            OnEdge?.Invoke(edge);
+            edge = edge.Next;
+        } while (edge != null && edge.Origin.ID != first);
+    }
+
+
 }

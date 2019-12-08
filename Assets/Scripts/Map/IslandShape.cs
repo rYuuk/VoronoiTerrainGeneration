@@ -1,6 +1,5 @@
 ﻿using UnityEngine;
 using System.Collections;
-using TriangleNet.Geometry;
 
 public class IslandShape
 {
@@ -16,13 +15,14 @@ public class IslandShape
     private float startAngle;
     private float dipAngle;
     private float dipWidth;
+    private FunctionType functionType;
     
     private const float ISLAND_FACTOR = 1.07f;
-
-    public IslandShape(int seed, float width, float height)
+    public IslandShape(int seed, float width, float height, FunctionType functionType)
     {
         this.width = width;
         this.height = height;
+        this.functionType = functionType;
 
         Random.InitState(seed);
         
@@ -32,32 +32,26 @@ public class IslandShape
         dipWidth = Random.Range(0.2f, 0.7f);
     }
 
-    public bool IsInside(FunctionType type, Point point)
+    public bool IsInside(Vector2 pos)
     {
-        switch (type)
+        switch (functionType)
         {
             case FunctionType.Radial:
-                return IsInsideRadial(point);
+                return IsInsideRadial(pos);
             case FunctionType.Perlin:
-                return IsInsidePerlin(point);
+                return IsInsidePerlin(pos);
             default:
                 break;
         }
         return true;
     }
 
-
-    /// <summary>
-    /// Source: https://github.com/amitp/mapgen2/blob/4394df0e04101dbbdc36ee1e61ad7d62446bb3f1/Map.as#L797
-    /// </summary>
-    /// <param name="point"></param>
-    /// <returns></returns>
-    private bool IsInsideRadial(Point point)
+    private bool IsInsideRadial(Vector2 pos)
     {
-        point = new Point(2 * (point.X / width - 0.5f), 2 * (point.Y / height - 0.5f));
+        pos = new Vector2(2 * (pos.x / width - 0.5f), 2 * (pos.y / height - 0.5f));
 
-        float angle = Mathf.Atan2((float)point.Y, (float)point.X);
-        float length = 0.5f * (Mathf.Max(Mathf.Abs((float)point.X), Mathf.Abs((float)point.Y)) + point.Length());
+        float angle = Mathf.Atan2(pos.y,pos.x);
+        float length = 0.5f * (Mathf.Max(Mathf.Abs(pos.x), Mathf.Abs(pos.y)) + pos.magnitude);
 
         float r1 = 0.5f + 0.40f * Mathf.Sin(startAngle + bumps * angle + Mathf.Cos((bumps + 3) * angle));
         float r2 = 0.7f - 0.20f * Mathf.Sin(startAngle + bumps * angle - Mathf.Sin((bumps + 2) * angle));
@@ -71,11 +65,11 @@ public class IslandShape
     }
 
 
-    private bool IsInsidePerlin(Point point)
+    private bool IsInsidePerlin(Vector2 pos)
     {
-        point = new Point(2 * (point.X / width - 0.5f), 2 * (point.Y / height - 0.5f));
-        float noise = Mathf.PerlinNoise((int)point.X, (int)point.Y);
-        return (noise > (0.3f * (1 + point.Length() * point.Length())));
+        pos = new Vector2(2 * (pos.y / width - 0.5f), 2 * (pos.y / height - 0.5f));
+        float noise = Mathf.PerlinNoise(pos.x, pos.y);
+        return (noise > (0.3f * (1 + pos.magnitude* pos.magnitude)));
 
     }
 

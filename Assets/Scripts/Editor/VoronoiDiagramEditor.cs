@@ -3,13 +3,13 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEditor;
 
-[CustomEditor(typeof(VoronoiDiagram))]
+[CustomEditor(typeof(TerrainGeneratorExample))]
 public class VoronoiDiagramEditor : Editor
 {
 
     public override void OnInspectorGUI()
     {
-        VoronoiDiagram voronoiDiagram = (VoronoiDiagram)target;
+        TerrainGeneratorExample voronoiDiagram = (TerrainGeneratorExample)target;
         
         if (DrawDefaultInspector())
         {
